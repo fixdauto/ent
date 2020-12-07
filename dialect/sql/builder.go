@@ -95,6 +95,7 @@ type TableBuilder struct {
 	exists      bool      // check existence.
 	charset     string    // table charset.
 	collation   string    // table collation.
+	options     string    // table options.
 	columns     []Querier // table columns.
 	primary     []string  // primary key.
 	constraints []Querier // foreign keys and indices.
@@ -172,6 +173,12 @@ func (t *TableBuilder) Collate(s string) *TableBuilder {
 	return t
 }
 
+// Options appends additional options to to the statement (MySQL only).
+func (t *TableBuilder) Options(s string) *TableBuilder {
+	t.options = s
+	return t
+}
+
 // Query returns query representation of a `CREATE TABLE` statement.
 //
 // CREATE TABLE [IF NOT EXISTS] name
@@ -201,6 +208,9 @@ func (t *TableBuilder) Query() (string, []interface{}) {
 	}
 	if t.collation != "" {
 		t.WriteString(" COLLATE " + t.collation)
+	}
+	if t.options != "" {
+		t.WriteString(" " + t.options)
 	}
 	return t.String(), t.args
 }
@@ -731,6 +741,15 @@ func (u *UpdateBuilder) Where(p *Predicate) *UpdateBuilder {
 	return u
 }
 
+// FromSelect makes it possible to update entities that match the sub-query.
+func (u *UpdateBuilder) FromSelect(s *Selector) *UpdateBuilder {
+	u.Where(s.where)
+	if table, _ := s.from.(*SelectTable); table != nil {
+		u.table = table.name
+	}
+	return u
+}
+
 // Empty reports whether this builder does not contain update changes.
 func (u *UpdateBuilder) Empty() bool {
 	return len(u.columns) == 0 && len(u.nulls) == 0
@@ -801,7 +820,7 @@ func (d *DeleteBuilder) Where(p *Predicate) *DeleteBuilder {
 	return d
 }
 
-// FromSelect make it possible to delete a sub query.
+// FromSelect makes it possible to delete a sub query.
 func (d *DeleteBuilder) FromSelect(s *Selector) *DeleteBuilder {
 	d.Where(s.where)
 	if table, _ := s.from.(*SelectTable); table != nil {
@@ -1146,10 +1165,12 @@ func (p *Predicate) ContainsFold(col, sub string) *Predicate {
 	})
 }
 
+// CompositeGT returns a comiposite ">" predicate
 func CompositeGT(columns []string, args ...interface{}) *Predicate {
 	return P().CompositeGT(columns, args...)
 }
 
+// CompositeLT returns a comiposite "<" predicate
 func CompositeLT(columns []string, args ...interface{}) *Predicate {
 	return P().CompositeLT(columns, args...)
 }
@@ -1166,13 +1187,13 @@ func (p *Predicate) compositeP(operator string, columns []string, args ...interf
 	})
 }
 
-// GT returns a composite ">" predicate.
+// CompositeGT returns a composite ">" predicate.
 func (p *Predicate) CompositeGT(columns []string, args ...interface{}) *Predicate {
 	const operator = " > "
 	return p.compositeP(operator, columns, args...)
 }
 
-// LT appends a composite "<" predicate.
+// CompositeLT appends a composite "<" predicate.
 func (p *Predicate) CompositeLT(columns []string, args ...interface{}) *Predicate {
 	const operator = " < "
 	return p.compositeP(operator, columns, args...)
@@ -1999,6 +2020,7 @@ func (b *Builder) Err() error {
 // An Op represents a predicate operator.
 type Op int
 
+// Predicate operators
 const (
 	OpEQ      Op = iota // logical and.
 	OpNEQ               // <>
